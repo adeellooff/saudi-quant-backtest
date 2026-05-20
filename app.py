@@ -5,7 +5,7 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional System (Market Regime Filter)")
+st.title("📊 Saudi Quant Scanner - Institutional System (Market Regime Fixed)")
 
 
 # ===================================
@@ -46,7 +46,7 @@ def add_indicators(df):
 # ===================================
 def run_backtest():
 
-    # ✅ تحميل مؤشر السوق السعودي
+    # ✅ تحميل TASI
     tasi = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
 
     if tasi.empty:
@@ -55,9 +55,14 @@ def run_backtest():
     if isinstance(tasi.columns, pd.MultiIndex):
         tasi.columns = tasi.columns.get_level_values(0)
 
-    tasi = tasi.copy()
     tasi["ema200"] = tasi["Close"].ewm(span=200, adjust=False).mean()
     tasi.dropna(inplace=True)
+
+    # ✅ إنشاء فلتر سوق كـ Dictionary للتواريخ
+    market_filter = {
+        date: tasi.loc[date, "Close"] > tasi.loc[date, "ema200"]
+        for date in tasi.index
+    }
 
     stocks = [
         "2222.SR", "2010.SR", "1120.SR", "7010.SR",
@@ -72,29 +77,24 @@ def run_backtest():
     for symbol in stocks:
 
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
-
         df = add_indicators(df)
 
         if df.empty or len(df) < 250:
             continue
 
-        # ✅ توحيد التواريخ مع TASI
-        df = df.join(
-            tasi[["Close", "ema200"]],
-            how="inner",
-            rsuffix="_tasi"
-        )
-
-        if df.empty:
-            continue
-
         for i in range(200, len(df) - 15):
 
-            # ✅ Market Regime Filter
-            if not (df["Close_tasi"].iloc[i] > df["ema200_tasi"].iloc[i]):
+            current_date = df.index[i]
+
+            # ✅ تحقق أن التاريخ موجود في TASI
+            if current_date not in market_filter:
                 continue
 
-            # ✅ Strong Stock Trend
+            # ✅ Market Regime Filter
+            if not market_filter[current_date]:
+                continue
+
+            # ✅ Strong Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
@@ -146,7 +146,7 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Backtest (Market Regime Filter)"):
+if st.button("Run Backtest (Market Filter Fixed)"):
 
     results = run_backtest()
 
