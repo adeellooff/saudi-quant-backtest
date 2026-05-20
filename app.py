@@ -137,20 +137,6 @@ def run_backtest():
 
             trades_B.append(result)
 
-    def stats(trades):
-        if len(trades) == 0:
-            return {"total":0,"winrate":0,"expectancy":0}
-        wins = trades.count(2)
-        total = len(trades)
-        winrate = wins / total
-        expectancy = (winrate * 2) - ((1-winrate) * 1)
-        return {
-            "total": total,
-            "winrate": round(winrate*100,2),
-            "expectancy": round(expectancy,2)
-        }
-
-    return stats(trades_A), stats(trades_B)
 
 if st.button("Run Backtest"):
     A, B = run_backtest()
@@ -163,8 +149,13 @@ if st.button("Run Backtest"):
         expectancy = np.mean(results) if total > 0 else 0
         return total, round(winrate,2), round(expectancy,2)
 
-    total_A, win_A, exp_A = stats(A)
-    total_B, win_B, exp_B = stats(B)
+   total_A = A["total"]
+win_A = A["winrate"]
+exp_A = A["expectancy"]
+
+total_B = B["total"]
+win_B = B["winrate"]
+exp_B = B["expectancy"]
 
     col1, col2 = st.columns(2)
 
