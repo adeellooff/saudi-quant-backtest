@@ -5,7 +5,7 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional System (Market Regime Fixed)")
+st.title("📊 Saudi Quant Scanner - Institutional System (EMA100 Market Filter)")
 
 
 # ===================================
@@ -46,7 +46,7 @@ def add_indicators(df):
 # ===================================
 def run_backtest():
 
-    # ✅ تحميل TASI
+    # ✅ تحميل مؤشر السوق السعودي
     tasi = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
 
     if tasi.empty:
@@ -55,12 +55,12 @@ def run_backtest():
     if isinstance(tasi.columns, pd.MultiIndex):
         tasi.columns = tasi.columns.get_level_values(0)
 
-    tasi["ema200"] = tasi["Close"].ewm(span=200, adjust=False).mean()
+    tasi["ema100"] = tasi["Close"].ewm(span=100, adjust=False).mean()
     tasi.dropna(inplace=True)
 
-    # ✅ إنشاء فلتر سوق كـ Dictionary للتواريخ
+    # ✅ فلتر السوق (Dictionary سريع)
     market_filter = {
-        date: tasi.loc[date, "Close"] > tasi.loc[date, "ema200"]
+        date: tasi.loc[date, "Close"] > tasi.loc[date, "ema100"]
         for date in tasi.index
     }
 
@@ -86,15 +86,15 @@ def run_backtest():
 
             current_date = df.index[i]
 
-            # ✅ تحقق أن التاريخ موجود في TASI
+            # ✅ تأكد أن التاريخ موجود في فلتر السوق
             if current_date not in market_filter:
                 continue
 
-            # ✅ Market Regime Filter
+            # ✅ Market Regime Filter (EMA100)
             if not market_filter[current_date]:
                 continue
 
-            # ✅ Strong Trend
+            # ✅ Strong Stock Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
@@ -146,11 +146,11 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Backtest (Market Filter Fixed)"):
+if st.button("Run Backtest (EMA100 Market Filter)"):
 
     results = run_backtest()
 
-    st.subheader("Results - Market Regime Filter")
+    st.subheader("Results - EMA100 Market Filter")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
