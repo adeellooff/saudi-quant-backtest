@@ -149,13 +149,16 @@ if st.button("Run Backtest"):
         expectancy = np.mean(results) if total > 0 else 0
         return total, round(winrate,2), round(expectancy,2)
 
-   total_A = A["total"]
-win_A = A["winrate"]
-exp_A = A["expectancy"]
+  if st.button("Run Backtest"):
+    A, B = run_backtest()
 
-total_B = B["total"]
-win_B = B["winrate"]
-exp_B = B["expectancy"]
+    total_A = A["total"]
+    win_A = A["winrate"]
+    exp_A = A["expectancy"]
+
+    total_B = B["total"]
+    win_B = B["winrate"]
+    exp_B = B["expectancy"]
 
     col1, col2 = st.columns(2)
 
