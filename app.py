@@ -11,10 +11,26 @@ st.title("📊 Saudi Quant Scanner - Backtesting Engine")
 STOCKS = ["2222.SR","1120.SR","2010.SR","7010.SR","1211.SR"]
 
 def add_indicators(df):
-    df['ema20'] = ta.trend.ema_indicator(df['Close'], window=20)
-    df['ema50'] = ta.trend.ema_indicator(df['Close'], window=50)
+    if df.empty:
+        return df
+
+    # إزالة MultiIndex إن وجد
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df.copy()
+
+    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+    df['High'] = pd.to_numeric(df['High'], errors='coerce')
+    df['Low'] = pd.to_numeric(df['Low'], errors='coerce')
+
+    df.dropna(inplace=True)
+
+    df['ema20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    df['ema50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['rsi'] = ta.momentum.rsi(df['Close'], window=14)
     df['macd'] = ta.trend.macd(df['Close'])
+
     return df
 
 def calculate_score(df, i):
