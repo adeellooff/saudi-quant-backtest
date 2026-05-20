@@ -4,8 +4,7 @@ import pandas as pd
 import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
-
-st.title("📊 Saudi Quant Scanner - Momentum Ranking System")
+st.title("📊 Saudi Quant Scanner - Walk Forward Momentum System")
 
 
 # ===================================
@@ -13,19 +12,10 @@ st.title("📊 Saudi Quant Scanner - Momentum Ranking System")
 # ===================================
 def add_indicators(df):
 
-    if df.empty:
-        return df
-
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
     df = df.copy()
-
-    numeric_cols = ["Close", "High", "Low", "Volume"]
-    for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    df.dropna(inplace=True)
 
     df["ema50"] = df["Close"].ewm(span=50, adjust=False).mean()
     df["ema200"] = df["Close"].ewm(span=200, adjust=False).mean()
@@ -37,12 +27,11 @@ def add_indicators(df):
     df["high_20"] = df["High"].rolling(20).max()
 
     df.dropna(inplace=True)
-
     return df
 
 
 # ===================================
-# ✅ Backtest Engine with Ranking
+# ✅ Main Backtest
 # ===================================
 def run_backtest():
 
@@ -54,66 +43,88 @@ def run_backtest():
         "3008.SR", "4190.SR", "1810.SR", "1830.SR"
     ]
 
-    momentum_scores = {}
-
-    # ✅ حساب Momentum لكل سهم
+    # ✅ تحميل البيانات مرة واحدة
+    data = {}
     for symbol in stocks:
-        df = yf.download(symbol, period="6mo", interval="1d", progress=False)
-
-        if df.empty or len(df) < 120:
+        df = yf.download(symbol, period="3y", interval="1d", progress=False)
+        if df.empty:
             continue
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        performance = (
-            df["Close"].iloc[-1] - df["Close"].iloc[-120]
-        ) / df["Close"].iloc[-120]
-
-        momentum_scores[symbol] = performance
-
-    if len(momentum_scores) == 0:
-        return {"total": 0, "winrate": 0, "expectancy": 0}
-
-    # ✅ اختيار أعلى 8 أسهم
-    top_stocks = sorted(
-        momentum_scores,
-        key=momentum_scores.get,
-        reverse=True
-    )[:5]
+        data[symbol] = add_indicators(df)
 
     trades = []
 
-    # ✅ تطبيق الاستراتيجية فقط على الأسهم الأقوى
-    for symbol in top_stocks:
+    # ✅ نحدد التواريخ المشتركة
+    common_dates = None
+    for df in data.values():
+        if common_dates is None:
+            common_dates = set(df.index)
+        else:
+            common_dates = common_dates & set(df.index)
 
-        df = yf.download(symbol, period="3y", interval="1d", progress=False)
-        df = add_indicators(df)
+    common_dates = sorted(list(common_dates))
 
-        if df.empty or len(df) < 250:
+    # ✅ Walk Forward Loop
+    for date in common_dates:
+
+        momentum_scores = {}
+
+        for symbol, df in data.items():
+
+            if date not in df.index:
+                continue
+
+            idx = df.index.get_loc(date)
+
+            if idx < 120:
+                continue
+
+            # ✅ Momentum 120 يوم
+            perf = (
+                df["Close"].iloc[idx] -
+                df["Close"].iloc[idx - 120]
+            ) / df["Close"].iloc[idx - 120]
+
+            momentum_scores[symbol] = perf
+
+        if len(momentum_scores) < 5:
             continue
 
-        for i in range(200, len(df) - 15):
+        # ✅ اختيار Top 5 لذلك اليوم
+        top5 = sorted(
+            momentum_scores,
+            key=momentum_scores.get,
+            reverse=True
+        )[:5]
+
+        # ✅ تطبيق النظام فقط عليهم
+        for symbol in top5:
+
+            df = data[symbol]
+
+            idx = df.index.get_loc(date)
+
+            if idx < 200 or idx >= len(df) - 15:
+                continue
 
             if not (
-                df["ema50"].iloc[i] > df["ema200"].iloc[i]
-                and df["Close"].iloc[i] > df["ema50"].iloc[i]
+                df["ema50"].iloc[idx] > df["ema200"].iloc[idx]
+                and df["Close"].iloc[idx] > df["ema50"].iloc[idx]
             ):
                 continue
 
             if not (
-                df["Close"].iloc[i] > df["high_20"].iloc[i - 1]
-                and df["Close"].iloc[i] > df["Close"].iloc[i - 1]
-                and df["rsi"].iloc[i] > 55
-                and df["Volume"].iloc[i] > df["volume_ma"].iloc[i] * 1.2
+                df["Close"].iloc[idx] > df["high_20"].iloc[idx - 1]
+                and df["Close"].iloc[idx] > df["Close"].iloc[idx - 1]
+                and df["rsi"].iloc[idx] > 55
+                and df["Volume"].iloc[idx] > df["volume_ma"].iloc[idx] * 1.2
             ):
                 continue
 
-            entry = df["Close"].iloc[i]
-            stop = entry - df["atr"].iloc[i]
-            target = entry + 1.5 * df["atr"].iloc[i]
+            entry = df["Close"].iloc[idx]
+            stop = entry - df["atr"].iloc[idx]
+            target = entry + 1.5 * df["atr"].iloc[idx]
 
-            future = df.iloc[i + 1 : i + 15]
+            future = df.iloc[idx + 1 : idx + 15]
 
             result = -1
 
@@ -145,11 +156,11 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Ranking Backtest"):
+if st.button("Run Walk Forward Backtest"):
 
     results = run_backtest()
 
-    st.subheader("Momentum Ranking Results")
+    st.subheader("Walk Forward Results")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
