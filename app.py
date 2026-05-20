@@ -5,9 +5,12 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional System (Market Filter)")
+st.title("📊 Saudi Quant Scanner - Institutional System (Market Regime Filter)")
 
 
+# ===================================
+# ✅ Indicator Function
+# ===================================
 def add_indicators(df):
 
     if df.empty:
@@ -38,14 +41,21 @@ def add_indicators(df):
     return df
 
 
+# ===================================
+# ✅ Backtest Engine
+# ===================================
 def run_backtest():
 
-    # ✅ تحميل المؤشر العام
-    tasi = yf.download("^TASI", period="3y", interval="1d", progress=False)
+    # ✅ تحميل مؤشر السوق السعودي
+    tasi = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
 
     if tasi.empty:
         return {"total": 0, "winrate": 0, "expectancy": 0}
 
+    if isinstance(tasi.columns, pd.MultiIndex):
+        tasi.columns = tasi.columns.get_level_values(0)
+
+    tasi = tasi.copy()
     tasi["ema200"] = tasi["Close"].ewm(span=200, adjust=False).mean()
     tasi.dropna(inplace=True)
 
@@ -62,13 +72,21 @@ def run_backtest():
     for symbol in stocks:
 
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
+
         df = add_indicators(df)
 
         if df.empty or len(df) < 250:
             continue
 
         # ✅ توحيد التواريخ مع TASI
-        df = df.join(tasi[["Close", "ema200"]], how="inner", rsuffix="_tasi")
+        df = df.join(
+            tasi[["Close", "ema200"]],
+            how="inner",
+            rsuffix="_tasi"
+        )
+
+        if df.empty:
+            continue
 
         for i in range(200, len(df) - 15):
 
@@ -76,7 +94,7 @@ def run_backtest():
             if not (df["Close_tasi"].iloc[i] > df["ema200_tasi"].iloc[i]):
                 continue
 
-            # ✅ Strong Trend
+            # ✅ Strong Stock Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
@@ -125,7 +143,10 @@ def run_backtest():
     }
 
 
-if st.button("Run Backtest (Market Filter)"):
+# ===================================
+# ✅ UI
+# ===================================
+if st.button("Run Backtest (Market Regime Filter)"):
 
     results = run_backtest()
 
