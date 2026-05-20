@@ -27,7 +27,7 @@ def run_backtest():
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
         if df.empty:
             continue
-        df = df.resample("M").last()  # تحويل إلى بيانات شهرية
+        df = df.resample("ME").last()  # تحويل إلى بيانات شهرية
         data[symbol] = df
 
     # ✅ تحديد التواريخ المشتركة
