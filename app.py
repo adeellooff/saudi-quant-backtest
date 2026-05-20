@@ -70,23 +70,87 @@ def simulate_trade(df, i):
     return 0
 
 def run_backtest():
-    results_A = []
-    results_B = []
+    df = yf.download("TASI.SR", period="3y", interval="1d")
 
-    for stock in STOCKS:
-        df = yf.download(stock, period="3y", interval="1d", progress=False)
-        df.dropna(inplace=True)
-        df = add_indicators(df)
+    df = add_indicators(df)
 
-        for i in range(50, len(df)-11):
-            score = calculate_score(df, i)
+    if df.empty:
+        return {}, {}
 
-            if score >= 75:
-                results_A.append(simulate_trade(df, i))
-            elif score >= 55:
-                results_B.append(simulate_trade(df, i))
+    df['ema200'] = df['Close'].ewm(span=200, adjust=False).mean()
+    df['atr'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
+    df['volume_ma'] = df['Volume'].rolling(20).mean()
+    df['high_20'] = df['High'].rolling(20).max()
 
-    return results_A, results_B
+    trades_A = []
+    trades_B = []
+
+    for i in range(200, len(df)-1):
+
+        # =========================
+        # ✅ System A - Breakout
+        # =========================
+        if (
+            df['Close'].iloc[i] > df['ema200'].iloc[i] and
+            df['High'].iloc[i] >= df['high_20'].iloc[i-1] and
+            df['Volume'].iloc[i] > df['volume_ma'].iloc[i]
+        ):
+            entry = df['Close'].iloc[i]
+            stop = entry - df['atr'].iloc[i]
+            target = entry + 2 * df['atr'].iloc[i]
+
+            future = df.iloc[i+1:i+15]
+
+            result = -1
+            for _, row in future.iterrows():
+                if row['Low'] <= stop:
+                    result = -1
+                    break
+                if row['High'] >= target:
+                    result = 2
+                    break
+
+            trades_A.append(result)
+
+        # =========================
+        # ✅ System B - Pullback
+        # =========================
+        if (
+            df['Close'].iloc[i] > df['ema200'].iloc[i] and
+            abs(df['Close'].iloc[i] - df['ema20'].iloc[i]) < df['atr'].iloc[i] and
+            40 < df['rsi'].iloc[i] < 50
+        ):
+            entry = df['Close'].iloc[i]
+            stop = entry - df['atr'].iloc[i]
+            target = entry + 2 * df['atr'].iloc[i]
+
+            future = df.iloc[i+1:i+10]
+
+            result = -1
+            for _, row in future.iterrows():
+                if row['Low'] <= stop:
+                    result = -1
+                    break
+                if row['High'] >= target:
+                    result = 2
+                    break
+
+            trades_B.append(result)
+
+    def stats(trades):
+        if len(trades) == 0:
+            return {"total":0,"winrate":0,"expectancy":0}
+        wins = trades.count(2)
+        total = len(trades)
+        winrate = wins / total
+        expectancy = (winrate * 2) - ((1-winrate) * 1)
+        return {
+            "total": total,
+            "winrate": round(winrate*100,2),
+            "expectancy": round(expectancy,2)
+        }
+
+    return stats(trades_A), stats(trades_B)
 
 if st.button("Run Backtest"):
     A, B = run_backtest()
