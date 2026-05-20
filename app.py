@@ -8,10 +8,11 @@ st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 st.title("📊 Saudi Quant Scanner - Backtesting Engine")
 
 
-# =============================
-# ✅ Add Indicators
-# =============================
+# ===================================
+# ✅ Indicator Preparation
+# ===================================
 def add_indicators(df):
+
     if df.empty:
         return df
 
@@ -20,10 +21,9 @@ def add_indicators(df):
 
     df = df.copy()
 
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-    df["High"] = pd.to_numeric(df["High"], errors="coerce")
-    df["Low"] = pd.to_numeric(df["Low"], errors="coerce")
-    df["Volume"] = pd.to_numeric(df["Volume"], errors="coerce")
+    numeric_cols = ["Close", "High", "Low", "Volume"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df.dropna(inplace=True)
 
@@ -41,83 +41,84 @@ def add_indicators(df):
     return df
 
 
-# =============================
-# ✅ Institutional Systems
-# =============================
+# ===================================
+# ✅ Institutional Backtest Engine
+# ===================================
 def run_backtest():
 
-    df = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
-
-    df = add_indicators(df)
-
-    if df.empty:
-        return {"total": 0, "winrate": 0, "expectancy": 0}, {
-            "total": 0,
-            "winrate": 0,
-            "expectancy": 0,
-        }
+    stocks = ["2222.SR", "2010.SR", "1120.SR", "7010.SR"]
 
     trades_A = []
     trades_B = []
 
-    for i in range(200, len(df) - 15):
+    for symbol in stocks:
 
-        # ======================
-        # ✅ System A Breakout
-        # ======================
-        if (
-            df["Close"].iloc[i] > df["ema200"].iloc[i]
-            and df["High"].iloc[i] >= df["high_20"].iloc[i - 1]
-            and df["Volume"].iloc[i] > df["volume_ma"].iloc[i]
-        ):
+        df = yf.download(symbol, period="3y", interval="1d", progress=False)
 
-            entry = df["Close"].iloc[i]
-            stop = entry - df["atr"].iloc[i]
-            target = entry + 2 * df["atr"].iloc[i]
+        df = add_indicators(df)
 
-            future = df.iloc[i + 1 : i + 15]
+        if df.empty or len(df) < 250:
+            continue
 
-            result = -1
+        for i in range(200, len(df) - 15):
 
-            for _, row in future.iterrows():
-                if row["Low"] <= stop:
-                    result = -1
-                    break
-                if row["High"] >= target:
-                    result = 2
-                    break
+            # ============================
+            # ✅ System A - Trend Breakout
+            # ============================
+            if (
+                df["Close"].iloc[i] > df["ema200"].iloc[i]
+                and df["High"].iloc[i] >= df["high_20"].iloc[i - 1]
+                and df["Volume"].iloc[i] > df["volume_ma"].iloc[i]
+            ):
 
-            trades_A.append(result)
+                entry = df["Close"].iloc[i]
+                stop = entry - df["atr"].iloc[i]
+                target = entry + 2 * df["atr"].iloc[i]
 
-        # ======================
-        # ✅ System B Pullback
-        # ======================
-        if (
-            df["Close"].iloc[i] > df["ema200"].iloc[i]
-            and abs(df["Close"].iloc[i] - df["ema20"].iloc[i])
-            < df["atr"].iloc[i]
-            and 40 < df["rsi"].iloc[i] < 50
-        ):
+                future = df.iloc[i + 1 : i + 15]
 
-            entry = df["Close"].iloc[i]
-            stop = entry - df["atr"].iloc[i]
-            target = entry + 2 * df["atr"].iloc[i]
+                result = -1
 
-            future = df.iloc[i + 1 : i + 10]
+                for _, row in future.iterrows():
+                    if row["Low"] <= stop:
+                        result = -1
+                        break
+                    if row["High"] >= target:
+                        result = 2
+                        break
 
-            result = -1
+                trades_A.append(result)
 
-            for _, row in future.iterrows():
-                if row["Low"] <= stop:
-                    result = -1
-                    break
-                if row["High"] >= target:
-                    result = 2
-                    break
+            # ============================
+            # ✅ System B - Pullback Trend
+            # ============================
+            if (
+                df["Close"].iloc[i] > df["ema200"].iloc[i]
+                and abs(df["Close"].iloc[i] - df["ema20"].iloc[i])
+                < df["atr"].iloc[i]
+                and 40 < df["rsi"].iloc[i] < 50
+            ):
 
-            trades_B.append(result)
+                entry = df["Close"].iloc[i]
+                stop = entry - df["atr"].iloc[i]
+                target = entry + 2 * df["atr"].iloc[i]
+
+                future = df.iloc[i + 1 : i + 10]
+
+                result = -1
+
+                for _, row in future.iterrows():
+                    if row["Low"] <= stop:
+                        result = -1
+                        break
+                    if row["High"] >= target:
+                        result = 2
+                        break
+
+                trades_B.append(result)
 
     def calculate_stats(trades):
+
         if len(trades) == 0:
             return {"total": 0, "winrate": 0, "expectancy": 0}
 
@@ -135,9 +136,9 @@ def run_backtest():
     return calculate_stats(trades_A), calculate_stats(trades_B)
 
 
-# =============================
-# ✅ UI Button
-# =============================
+# ===================================
+# ✅ UI
+# ===================================
 if st.button("Run Backtest"):
 
     A, B = run_backtest()
