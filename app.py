@@ -1,39 +1,16 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import ta
+import numpy as np
 
-st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
-st.title("📊 Saudi Quant Scanner - Walk Forward Momentum System")
-
-
-# ===================================
-# ✅ Indicator Function
-# ===================================
-def add_indicators(df):
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.copy()
-
-    df["ema50"] = df["Close"].ewm(span=50, adjust=False).mean()
-    df["ema200"] = df["Close"].ewm(span=200, adjust=False).mean()
-    df["rsi"] = ta.momentum.rsi(df["Close"], window=14)
-    df["atr"] = ta.volatility.average_true_range(
-        df["High"], df["Low"], df["Close"], window=14
-    )
-    df["volume_ma"] = df["Volume"].rolling(20).mean()
-    df["high_20"] = df["High"].rolling(20).max()
-
-    df.dropna(inplace=True)
-    return df
+st.set_page_config(page_title="Saudi Momentum Portfolio", layout="wide")
+st.title("📊 Monthly Momentum Portfolio Backtest")
 
 
-# ===================================
-# ✅ Main Backtest
-# ===================================
 def run_backtest():
+
+    initial_capital = 50000
+    capital = initial_capital
 
     stocks = [
         "2222.SR", "2010.SR", "1120.SR", "7010.SR",
@@ -43,17 +20,17 @@ def run_backtest():
         "3008.SR", "4190.SR", "1810.SR", "1830.SR"
     ]
 
-    # ✅ تحميل البيانات مرة واحدة
     data = {}
+
+    # ✅ تحميل البيانات
     for symbol in stocks:
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
         if df.empty:
             continue
-        data[symbol] = add_indicators(df)
+        df = df.resample("M").last()  # تحويل إلى بيانات شهرية
+        data[symbol] = df
 
-    trades = []
-
-    # ✅ نحدد التواريخ المشتركة
+    # ✅ تحديد التواريخ المشتركة
     common_dates = None
     for df in data.values():
         if common_dates is None:
@@ -63,8 +40,12 @@ def run_backtest():
 
     common_dates = sorted(list(common_dates))
 
-    # ✅ Walk Forward Loop
-    for date in common_dates:
+    equity_curve = []
+
+    # ✅ بدء من الشهر 7 (لأننا نحتاج 6 أشهر لحساب المومنتوم)
+    for i in range(6, len(common_dates) - 1):
+
+        date = common_dates[i]
 
         momentum_scores = {}
 
@@ -75,92 +56,78 @@ def run_backtest():
 
             idx = df.index.get_loc(date)
 
-            if idx < 120:
+            if idx < 6:
                 continue
 
-            # ✅ Momentum 120 يوم
             perf = (
                 df["Close"].iloc[idx] -
-                df["Close"].iloc[idx - 120]
-            ) / df["Close"].iloc[idx - 120]
+                df["Close"].iloc[idx - 6]
+            ) / df["Close"].iloc[idx - 6]
 
             momentum_scores[symbol] = perf
 
         if len(momentum_scores) < 5:
+            equity_curve.append(capital)
             continue
 
-        # ✅ اختيار Top 5 لذلك اليوم
         top5 = sorted(
             momentum_scores,
             key=momentum_scores.get,
             reverse=True
         )[:5]
 
-        # ✅ تطبيق النظام فقط عليهم
+        next_date = common_dates[i + 1]
+
+        monthly_return = 0
+
         for symbol in top5:
-
             df = data[symbol]
-
-            idx = df.index.get_loc(date)
-
-            if idx < 200 or idx >= len(df) - 15:
+            if next_date not in df.index:
                 continue
 
-            if not (
-                df["ema50"].iloc[idx] > df["ema200"].iloc[idx]
-                and df["Close"].iloc[idx] > df["ema50"].iloc[idx]
-            ):
-                continue
+            idx_now = df.index.get_loc(date)
+            idx_next = df.index.get_loc(next_date)
 
-            if not (
-                df["Close"].iloc[idx] > df["high_20"].iloc[idx - 1]
-                and df["Close"].iloc[idx] > df["Close"].iloc[idx - 1]
-                and df["rsi"].iloc[idx] > 55
-                and df["Volume"].iloc[idx] > df["volume_ma"].iloc[idx] * 1.2
-            ):
-                continue
+            ret = (
+                df["Close"].iloc[idx_next] -
+                df["Close"].iloc[idx_now]
+            ) / df["Close"].iloc[idx_now]
 
-            entry = df["Close"].iloc[idx]
-            stop = entry - df["atr"].iloc[idx]
-            target = entry + 1.5 * df["atr"].iloc[idx]
+            monthly_return += ret / 5  # توزيع متساوي
 
-            future = df.iloc[idx + 1 : idx + 15]
+        capital *= (1 + monthly_return)
+        equity_curve.append(capital)
 
-            result = -1
+    if len(equity_curve) == 0:
+        return None
 
-            for _, row in future.iterrows():
-                if row["Low"] <= stop:
-                    result = -1
-                    break
-                if row["High"] >= target:
-                    result = 1.5
-                    break
+    equity_series = pd.Series(equity_curve)
 
-            trades.append(result)
+    total_return = (equity_series.iloc[-1] / initial_capital - 1) * 100
+    years = len(equity_series) / 12
+    cagr = ((equity_series.iloc[-1] / initial_capital) ** (1 / years) - 1) * 100
 
-    if len(trades) == 0:
-        return {"total": 0, "winrate": 0, "expectancy": 0}
-
-    wins = trades.count(1.5)
-    total = len(trades)
-    winrate = wins / total
-    expectancy = (winrate * 1.5) - ((1 - winrate) * 1)
+    rolling_max = equity_series.cummax()
+    drawdown = (equity_series - rolling_max) / rolling_max
+    max_dd = drawdown.min() * 100
 
     return {
-        "total": total,
-        "winrate": round(winrate * 100, 2),
-        "expectancy": round(expectancy, 2),
+        "final_capital": round(equity_series.iloc[-1], 2),
+        "total_return": round(total_return, 2),
+        "cagr": round(cagr, 2),
+        "max_drawdown": round(max_dd, 2)
     }
 
 
-# ===================================
-# ✅ UI
-# ===================================
-if st.button("Run Walk Forward Backtest"):
+if st.button("Run Monthly Portfolio Backtest"):
 
     results = run_backtest()
 
-    st.subheader("Walk Forward Results")
-    st.write("Total Trades:", results["total"])
-    st.write("Win Rate:", results["winrate"], "%")
-    st.write("Expectancy (R):", results["expectancy"])
+    if results is None:
+        st.write("No data available")
+    else:
+        st.subheader("📈 Portfolio Results")
+        st.write("Final Capital:", results["final_capital"])
+        st.write("Total Return %:", results["total_return"])
+        st.write("CAGR %:", results["cagr"])
+        st.write("Max Drawdown %:", results["max_drawdown"])
