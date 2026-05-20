@@ -5,12 +5,9 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional Quality System (Expanded Universe)")
+st.title("📊 Saudi Quant Scanner - Institutional System (RR 1:1.2)")
 
 
-# ===================================
-# ✅ Indicator Preparation
-# ===================================
 def add_indicators(df):
 
     if df.empty:
@@ -41,9 +38,6 @@ def add_indicators(df):
     return df
 
 
-# ===================================
-# ✅ Institutional Backtest
-# ===================================
 def run_backtest():
 
     stocks = [
@@ -59,7 +53,6 @@ def run_backtest():
     for symbol in stocks:
 
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
-
         df = add_indicators(df)
 
         if df.empty or len(df) < 250:
@@ -67,14 +60,12 @@ def run_backtest():
 
         for i in range(200, len(df) - 15):
 
-            # ✅ Strong Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
             ):
                 continue
 
-            # ✅ Confirmed Breakout
             if not (
                 df["Close"].iloc[i] > df["high_20"].iloc[i - 1]
                 and df["Close"].iloc[i] > df["Close"].iloc[i - 1]
@@ -85,7 +76,7 @@ def run_backtest():
 
             entry = df["Close"].iloc[i]
             stop = entry - df["atr"].iloc[i]
-            target = entry + 1.5 * df["atr"].iloc[i]
+            target = entry + 1.2 * df["atr"].iloc[i]   # ✅ التعديل هنا
 
             future = df.iloc[i + 1 : i + 15]
 
@@ -96,7 +87,7 @@ def run_backtest():
                     result = -1
                     break
                 if row["High"] >= target:
-                    result = 1.5
+                    result = 1.2
                     break
 
             trades.append(result)
@@ -104,10 +95,10 @@ def run_backtest():
     if len(trades) == 0:
         return {"total": 0, "winrate": 0, "expectancy": 0}
 
-    wins = trades.count(1.5)
+    wins = trades.count(1.2)
     total = len(trades)
     winrate = wins / total
-    expectancy = (winrate * 1.5) - ((1 - winrate) * 1)
+    expectancy = (winrate * 1.2) - ((1 - winrate) * 1)
 
     return {
         "total": total,
@@ -116,14 +107,11 @@ def run_backtest():
     }
 
 
-# ===================================
-# ✅ UI
-# ===================================
-if st.button("Run Institutional Backtest (Expanded)"):
+if st.button("Run Backtest (RR 1:1.2)"):
 
     results = run_backtest()
 
-    st.subheader("Expanded Universe Results")
+    st.subheader("Results - RR 1:1.2")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
