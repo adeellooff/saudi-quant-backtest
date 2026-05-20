@@ -61,16 +61,17 @@ def run_backtest():
 
         for i in range(200, len(df) - 15):
 
-            # ✅ Strong Trend Filter
+            # ✅ Strong Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
             ):
                 continue
 
-            # ✅ Breakout Condition
+            # ✅ Real Breakout Confirmation
             if not (
-                df["High"].iloc[i] >= df["high_20"].iloc[i - 1]
+                df["Close"].iloc[i] > df["high_20"].iloc[i - 1]
+                and df["Close"].iloc[i] > df["Close"].iloc[i - 1]
                 and df["rsi"].iloc[i] > 55
                 and df["Volume"].iloc[i] > df["volume_ma"].iloc[i] * 1.2
             ):
