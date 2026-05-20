@@ -5,7 +5,7 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional System (EMA100 Market Filter)")
+st.title("📊 Saudi Quant Scanner - Institutional System (Stable Market Filter)")
 
 
 # ===================================
@@ -46,23 +46,20 @@ def add_indicators(df):
 # ===================================
 def run_backtest():
 
-    # ✅ تحميل مؤشر السوق السعودي
+    # ✅ تحميل مؤشر السوق
     tasi = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
 
     if tasi.empty:
-        return {"total": 0, "winrate": 0, "expectancy": 0}
+        market_up = True  # لو فشل التحميل لا نمنع التداول
+    else:
+        if isinstance(tasi.columns, pd.MultiIndex):
+            tasi.columns = tasi.columns.get_level_values(0)
 
-    if isinstance(tasi.columns, pd.MultiIndex):
-        tasi.columns = tasi.columns.get_level_values(0)
+        tasi["ema100"] = tasi["Close"].ewm(span=100, adjust=False).mean()
+        tasi.dropna(inplace=True)
 
-    tasi["ema100"] = tasi["Close"].ewm(span=100, adjust=False).mean()
-    tasi.dropna(inplace=True)
-
-    # ✅ فلتر السوق (Dictionary سريع)
-    market_filter = {
-        date: tasi.loc[date, "Close"] > tasi.loc[date, "ema100"]
-        for date in tasi.index
-    }
+        # ✅ فلتر بسيط: هل السوق حاليًا فوق EMA100؟
+        market_up = tasi["Close"].iloc[-1] > tasi["ema100"].iloc[-1]
 
     stocks = [
         "2222.SR", "2010.SR", "1120.SR", "7010.SR",
@@ -74,6 +71,10 @@ def run_backtest():
 
     trades = []
 
+    # ✅ إذا السوق هابط بالكامل لا نتداول
+    if not market_up:
+        return {"total": 0, "winrate": 0, "expectancy": 0}
+
     for symbol in stocks:
 
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
@@ -83,16 +84,6 @@ def run_backtest():
             continue
 
         for i in range(200, len(df) - 15):
-
-            current_date = df.index[i]
-
-            # ✅ تأكد أن التاريخ موجود في فلتر السوق
-            if current_date not in market_filter:
-                continue
-
-            # ✅ Market Regime Filter (EMA100)
-            if not market_filter[current_date]:
-                continue
 
             # ✅ Strong Stock Trend
             if not (
@@ -146,11 +137,11 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Backtest (EMA100 Market Filter)"):
+if st.button("Run Backtest (Stable Market Filter)"):
 
     results = run_backtest()
 
-    st.subheader("Results - EMA100 Market Filter")
+    st.subheader("Results - Stable Market Filter")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
