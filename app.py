@@ -80,7 +80,7 @@ def run_backtest():
         momentum_scores,
         key=momentum_scores.get,
         reverse=True
-    )[:8]
+    )[:5]
 
     trades = []
 
