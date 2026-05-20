@@ -5,7 +5,7 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional Quality System")
+st.title("📊 Saudi Quant Scanner - Institutional Quality System (Expanded Universe)")
 
 
 # ===================================
@@ -42,11 +42,17 @@ def add_indicators(df):
 
 
 # ===================================
-# ✅ Institutional High Quality Backtest
+# ✅ Institutional Backtest
 # ===================================
 def run_backtest():
 
-    stocks = ["2222.SR", "2010.SR", "1120.SR", "7010.SR"]
+    stocks = [
+        "2222.SR", "2010.SR", "1120.SR", "7010.SR",
+        "1211.SR", "1180.SR", "1060.SR", "1050.SR",
+        "1020.SR", "2380.SR", "2020.SR", "4002.SR",
+        "4003.SR", "4004.SR", "8010.SR", "8030.SR",
+        "3008.SR", "4190.SR", "1810.SR", "1830.SR"
+    ]
 
     trades = []
 
@@ -68,7 +74,7 @@ def run_backtest():
             ):
                 continue
 
-            # ✅ Real Breakout Confirmation
+            # ✅ Confirmed Breakout
             if not (
                 df["Close"].iloc[i] > df["high_20"].iloc[i - 1]
                 and df["Close"].iloc[i] > df["Close"].iloc[i - 1]
@@ -113,11 +119,11 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Institutional Backtest"):
+if st.button("Run Institutional Backtest (Expanded)"):
 
     results = run_backtest()
 
-    st.subheader("Institutional Quality Results")
+    st.subheader("Expanded Universe Results")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
