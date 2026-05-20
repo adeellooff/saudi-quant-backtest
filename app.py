@@ -5,7 +5,7 @@ import ta
 
 st.set_page_config(page_title="Saudi Quant Scanner", layout="wide")
 
-st.title("📊 Saudi Quant Scanner - Institutional System (Stable Market Filter)")
+st.title("📊 Saudi Quant Scanner - Momentum Ranking System")
 
 
 # ===================================
@@ -42,24 +42,9 @@ def add_indicators(df):
 
 
 # ===================================
-# ✅ Backtest Engine
+# ✅ Backtest Engine with Ranking
 # ===================================
 def run_backtest():
-
-    # ✅ تحميل مؤشر السوق
-    tasi = yf.download("TASI.SR", period="3y", interval="1d", progress=False)
-
-    if tasi.empty:
-        market_up = True  # لو فشل التحميل لا نمنع التداول
-    else:
-        if isinstance(tasi.columns, pd.MultiIndex):
-            tasi.columns = tasi.columns.get_level_values(0)
-
-        tasi["ema100"] = tasi["Close"].ewm(span=100, adjust=False).mean()
-        tasi.dropna(inplace=True)
-
-        # ✅ فلتر بسيط: هل السوق حاليًا فوق EMA100؟
-        market_up = tasi["Close"].iloc[-1] > tasi["ema100"].iloc[-1]
 
     stocks = [
         "2222.SR", "2010.SR", "1120.SR", "7010.SR",
@@ -69,13 +54,38 @@ def run_backtest():
         "3008.SR", "4190.SR", "1810.SR", "1830.SR"
     ]
 
-    trades = []
+    momentum_scores = {}
 
-    # ✅ إذا السوق هابط بالكامل لا نتداول
-    if not market_up:
+    # ✅ حساب Momentum لكل سهم
+    for symbol in stocks:
+        df = yf.download(symbol, period="6mo", interval="1d", progress=False)
+
+        if df.empty or len(df) < 120:
+            continue
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        performance = (
+            df["Close"].iloc[-1] - df["Close"].iloc[-120]
+        ) / df["Close"].iloc[-120]
+
+        momentum_scores[symbol] = performance
+
+    if len(momentum_scores) == 0:
         return {"total": 0, "winrate": 0, "expectancy": 0}
 
-    for symbol in stocks:
+    # ✅ اختيار أعلى 8 أسهم
+    top_stocks = sorted(
+        momentum_scores,
+        key=momentum_scores.get,
+        reverse=True
+    )[:8]
+
+    trades = []
+
+    # ✅ تطبيق الاستراتيجية فقط على الأسهم الأقوى
+    for symbol in top_stocks:
 
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
         df = add_indicators(df)
@@ -85,14 +95,12 @@ def run_backtest():
 
         for i in range(200, len(df) - 15):
 
-            # ✅ Strong Stock Trend
             if not (
                 df["ema50"].iloc[i] > df["ema200"].iloc[i]
                 and df["Close"].iloc[i] > df["ema50"].iloc[i]
             ):
                 continue
 
-            # ✅ Confirmed Breakout
             if not (
                 df["Close"].iloc[i] > df["high_20"].iloc[i - 1]
                 and df["Close"].iloc[i] > df["Close"].iloc[i - 1]
@@ -137,11 +145,11 @@ def run_backtest():
 # ===================================
 # ✅ UI
 # ===================================
-if st.button("Run Backtest (Stable Market Filter)"):
+if st.button("Run Ranking Backtest"):
 
     results = run_backtest()
 
-    st.subheader("Results - Stable Market Filter")
+    st.subheader("Momentum Ranking Results")
     st.write("Total Trades:", results["total"])
     st.write("Win Rate:", results["winrate"], "%")
     st.write("Expectancy (R):", results["expectancy"])
