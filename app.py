@@ -3,8 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Saudi Momentum Portfolio (Filtered)", layout="wide")
-st.title("📊 Monthly Momentum Portfolio - Market Filter")
+st.set_page_config(page_title="Saudi Momentum 3M", layout="wide")
+st.title("📊 Monthly Momentum Portfolio - 3 Month Strategy")
 
 
 def run_backtest():
@@ -28,7 +28,6 @@ def run_backtest():
 
     data = {}
 
-    # ✅ تحميل البيانات
     for symbol in stocks:
         df = yf.download(symbol, period="5y", interval="1d", progress=False)
 
@@ -41,13 +40,12 @@ def run_backtest():
         df = df.resample("ME").last()
         df = df.dropna()
 
-        if len(df) >= 12:
+        if len(df) >= 6:
             data[symbol] = df
 
     if len(data) < 10:
         return None
 
-    # ✅ التواريخ المشتركة
     common_dates = None
     for df in data.values():
         if common_dates is None:
@@ -59,7 +57,7 @@ def run_backtest():
 
     equity_curve = []
 
-    for i in range(6, len(common_dates) - 1):
+    for i in range(3, len(common_dates) - 1):
 
         date = common_dates[i]
         next_date = common_dates[i + 1]
@@ -73,10 +71,10 @@ def run_backtest():
 
             idx = df.index.get_loc(date)
 
-            if idx < 6:
+            if idx < 3:
                 continue
 
-            past_price = df["Close"].iloc[idx - 6]
+            past_price = df["Close"].iloc[idx - 3]
             current_price = df["Close"].iloc[idx]
 
             if past_price == 0:
@@ -91,15 +89,12 @@ def run_backtest():
             equity_curve.append(capital)
             continue
 
-        # ✅ فلتر السوق: نحسب متوسط المومنتوم
-        market_avg_momentum = np.mean(list(momentum_scores.values()))
-
-        if market_avg_momentum <= 0:
-            # نبقى كاش هذا الشهر
+        # ✅ فلتر السوق
+        market_avg = np.mean(list(momentum_scores.values()))
+        if market_avg <= 0:
             equity_curve.append(capital)
             continue
 
-        # ✅ اختيار Top 5
         top5 = sorted(
             momentum_scores,
             key=momentum_scores.get,
@@ -152,14 +147,14 @@ def run_backtest():
     }
 
 
-if st.button("Run Filtered Backtest"):
+if st.button("Run 3-Month Momentum Backtest"):
 
     results = run_backtest()
 
     if results is None:
         st.write("Not enough data available")
     else:
-        st.subheader("📈 Portfolio Results (Market Filter)")
+        st.subheader("📈 Portfolio Results (3M Momentum)")
         st.write("Final Capital:", results["final_capital"])
         st.write("Total Return %:", results["total_return"])
         st.write("CAGR %:", results["cagr"])
