@@ -97,7 +97,7 @@ def run_backtest():
             momentum_scores,
             key=momentum_scores.get,
             reverse=True
-        )[:5]
+        )[:3]
 
         monthly_return = 0
 
@@ -118,7 +118,7 @@ def run_backtest():
                 continue
 
             ret = (price_next - price_now) / price_now
-            monthly_return += ret / 5
+            monthly_return += ret / 3
 
         capital *= (1 + monthly_return)
         equity_curve.append(capital)
