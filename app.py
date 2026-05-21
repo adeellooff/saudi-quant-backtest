@@ -22,15 +22,26 @@ def run_backtest():
 
     data = {}
 
-    # ✅ تحميل البيانات
+    # ✅ تحميل البيانات وتحويلها إلى شهرية
     for symbol in stocks:
         df = yf.download(symbol, period="3y", interval="1d", progress=False)
+
         if df.empty:
             continue
-        df = df.resample("ME").last()  # تحويل إلى بيانات شهرية
-        data[symbol] = df
 
-    # ✅ تحديد التواريخ المشتركة
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        df = df.resample("ME").last()   # ✅ Month End صحيح
+        df = df.dropna()
+
+        if len(df) >= 12:
+            data[symbol] = df
+
+    if len(data) < 5:
+        return None
+
+    # ✅ إيجاد التواريخ المشتركة
     common_dates = None
     for df in data.values():
         if common_dates is None:
@@ -42,10 +53,11 @@ def run_backtest():
 
     equity_curve = []
 
-    # ✅ بدء من الشهر 7 (لأننا نحتاج 6 أشهر لحساب المومنتوم)
+    # ✅ نبدأ من الشهر السابع (نحتاج 6 أشهر لحساب المومنتوم)
     for i in range(6, len(common_dates) - 1):
 
         date = common_dates[i]
+        next_date = common_dates[i + 1]
 
         momentum_scores = {}
 
@@ -59,41 +71,54 @@ def run_backtest():
             if idx < 6:
                 continue
 
-            perf = (
-                df["Close"].iloc[idx] -
-                df["Close"].iloc[idx - 6]
-            ) / df["Close"].iloc[idx - 6]
+            past_price = df["Close"].iloc[idx - 6]
+            current_price = df["Close"].iloc[idx]
 
-            momentum_scores[symbol] = perf
+            if past_price == 0:
+                continue
 
-        if len(momentum_scores) < 5:
+            perf = (current_price - past_price) / past_price
+
+            if pd.notna(perf):
+                momentum_scores[symbol] = perf
+
+        # ✅ تنظيف القيم
+        clean_scores = {
+            k: v for k, v in momentum_scores.items()
+            if pd.notna(v)
+        }
+
+        if len(clean_scores) < 5:
             equity_curve.append(capital)
             continue
 
+        # ✅ اختيار Top 5
         top5 = sorted(
-            momentum_scores,
-            key=momentum_scores.get,
+            clean_scores,
+            key=clean_scores.get,
             reverse=True
         )[:5]
-
-        next_date = common_dates[i + 1]
 
         monthly_return = 0
 
         for symbol in top5:
+
             df = data[symbol]
+
             if next_date not in df.index:
                 continue
 
             idx_now = df.index.get_loc(date)
             idx_next = df.index.get_loc(next_date)
 
-            ret = (
-                df["Close"].iloc[idx_next] -
-                df["Close"].iloc[idx_now]
-            ) / df["Close"].iloc[idx_now]
+            price_now = df["Close"].iloc[idx_now]
+            price_next = df["Close"].iloc[idx_next]
 
-            monthly_return += ret / 5  # توزيع متساوي
+            if price_now == 0:
+                continue
+
+            ret = (price_next - price_now) / price_now
+            monthly_return += ret / 5
 
         capital *= (1 + monthly_return)
         equity_curve.append(capital)
@@ -103,28 +128,33 @@ def run_backtest():
 
     equity_series = pd.Series(equity_curve)
 
-    total_return = (equity_series.iloc[-1] / initial_capital - 1) * 100
+    final_capital = equity_series.iloc[-1]
+    total_return = (final_capital / initial_capital - 1) * 100
+
     years = len(equity_series) / 12
-    cagr = ((equity_series.iloc[-1] / initial_capital) ** (1 / years) - 1) * 100
+    cagr = ((final_capital / initial_capital) ** (1 / years) - 1) * 100
 
     rolling_max = equity_series.cummax()
     drawdown = (equity_series - rolling_max) / rolling_max
     max_dd = drawdown.min() * 100
 
     return {
-        "final_capital": round(equity_series.iloc[-1], 2),
+        "final_capital": round(final_capital, 2),
         "total_return": round(total_return, 2),
         "cagr": round(cagr, 2),
         "max_drawdown": round(max_dd, 2)
     }
 
 
+# ===================================
+# ✅ UI
+# ===================================
 if st.button("Run Monthly Portfolio Backtest"):
 
     results = run_backtest()
 
     if results is None:
-        st.write("No data available")
+        st.write("Not enough data available")
     else:
         st.subheader("📈 Portfolio Results")
         st.write("Final Capital:", results["final_capital"])
