@@ -3,8 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Saudi Momentum Portfolio (Expanded)", layout="wide")
-st.title("📊 Monthly Momentum Portfolio Backtest - Expanded Universe")
+st.set_page_config(page_title="Saudi Momentum Portfolio (Filtered)", layout="wide")
+st.title("📊 Monthly Momentum Portfolio - Market Filter")
 
 
 def run_backtest():
@@ -12,7 +12,6 @@ def run_backtest():
     initial_capital = 50000
     capital = initial_capital
 
-    # ✅ قائمة موسعة ~70 سهم سعودي
     stocks = [
         "2222.SR","2010.SR","1120.SR","7010.SR","1211.SR","1180.SR","1060.SR",
         "1050.SR","1020.SR","2380.SR","2020.SR","4002.SR","4003.SR","4004.SR",
@@ -29,7 +28,7 @@ def run_backtest():
 
     data = {}
 
-    # ✅ تحميل البيانات الشهرية
+    # ✅ تحميل البيانات
     for symbol in stocks:
         df = yf.download(symbol, period="5y", interval="1d", progress=False)
 
@@ -92,12 +91,20 @@ def run_backtest():
             equity_curve.append(capital)
             continue
 
-        # ✅ Top 5 فقط
+        # ✅ فلتر السوق: نحسب متوسط المومنتوم
+        market_avg_momentum = np.mean(list(momentum_scores.values()))
+
+        if market_avg_momentum <= 0:
+            # نبقى كاش هذا الشهر
+            equity_curve.append(capital)
+            continue
+
+        # ✅ اختيار Top 5
         top5 = sorted(
             momentum_scores,
             key=momentum_scores.get,
             reverse=True
-        )[:3]
+        )[:5]
 
         monthly_return = 0
 
@@ -118,7 +125,7 @@ def run_backtest():
                 continue
 
             ret = (price_next - price_now) / price_now
-            monthly_return += ret / 3
+            monthly_return += ret / 5
 
         capital *= (1 + monthly_return)
         equity_curve.append(capital)
@@ -145,14 +152,14 @@ def run_backtest():
     }
 
 
-if st.button("Run Expanded Universe Backtest"):
+if st.button("Run Filtered Backtest"):
 
     results = run_backtest()
 
     if results is None:
         st.write("Not enough data available")
     else:
-        st.subheader("📈 Portfolio Results (Expanded)")
+        st.subheader("📈 Portfolio Results (Market Filter)")
         st.write("Final Capital:", results["final_capital"])
         st.write("Total Return %:", results["total_return"])
         st.write("CAGR %:", results["cagr"])
